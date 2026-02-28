@@ -1,0 +1,33 @@
+# Virtual Environment
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables (NEVER push this — contains API keys)
+.env
+.env.local
+
+# Docker
+docker-compose.override.yml
+
+# MacOS junk files
+.DS_Store
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Node modules (for React frontend)
+node_modules/
+frontend/build/
+
+# Database local files
+*.sqlite3
