@@ -30,3 +30,18 @@ def publish_file_detected(file_data: dict):
     producer.send("file.detected", value=file_data)
     producer.flush()  # ensures message is actually sent before moving on
     logger.info(f"Published to file.detected: {file_data['filename']}")
+    
+def publish_file_parsed(file_data: dict):
+    """Publishes to file.parsed topic"""
+    producer = get_producer()
+    producer.send("file.parsed", value=file_data)
+    producer.flush()
+    logger.info(f"Published to file.parsed: {file_data['filename']}")
+
+
+def publish_file_organized(file_data: dict):
+    """Publishes to file.organized topic"""
+    producer = get_producer()
+    producer.send("file.organized", value=file_data)
+    producer.flush()
+    logger.info(f"Published to file.organized: {file_data['filename']}")

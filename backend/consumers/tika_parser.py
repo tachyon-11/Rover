@@ -6,6 +6,7 @@ from kafka import KafkaConsumer
 from dotenv import load_dotenv
 from backend.db.database import SessionLocal
 from backend.db.repository import FileRepository
+from backend.services.kafka_producer import publish_file_parsed
 from backend.services.llm_service import generate_file_description
 
 load_dotenv()
@@ -111,6 +112,13 @@ def start_tika_consumer():
             )
 
             consumer.commit()
+            
+            publish_file_parsed({
+                "filename": file_record.filename,
+                "path": file_record.path,
+                "file_id": str(file_record.id)
+            })
+            
             logger.info(f"✅ Parsed and committed: {file_data['filename']}")
 
         except Exception as e:
