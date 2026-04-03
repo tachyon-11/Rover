@@ -31,3 +31,6 @@ frontend/build/
 
 # Database local files
 *.sqlite3
+
+watch_folder/*
+!watch_folder/.gitkeep

@@ -6,6 +6,7 @@ from kafka import KafkaConsumer
 from dotenv import load_dotenv
 from backend.db.database import SessionLocal
 from backend.db.repository import FileRepository
+from backend.services.llm_service import generate_file_description
 
 load_dotenv()
 
@@ -77,8 +78,8 @@ def start_tika_consumer():
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
         group_id="tika-parser-group",
         value_deserializer=lambda v: json.loads(v.decode("utf-8")),
-        auto_offset_reset="earliest",   # start from beginning if no offset
-        enable_auto_commit=False,        # manual commit for reliability
+        auto_offset_reset="earliest",
+        enable_auto_commit=False,
     )
 
     logger.info("Tika consumer connected to Kafka, waiting for messages...")
@@ -92,15 +93,21 @@ def start_tika_consumer():
             repo = FileRepository(db)
 
             file_record = repo.create(file_data)
-            logger.info(f"DB record created: {file_record.id}")
 
             tika_result = parse_with_tika(file_data["path"])
+
+            description = generate_file_description(
+                filename=file_data["filename"],
+                extracted_text=tika_result["extracted_text"],
+                metadata=tika_result["metadata"]
+            )
 
             repo.update_parsed(
                 file_id=file_record.id,
                 extracted_text=tika_result["extracted_text"],
                 file_type=tika_result["file_type"],
-                metadata=tika_result["metadata"]
+                metadata=tika_result["metadata"],
+                description=description
             )
 
             consumer.commit()

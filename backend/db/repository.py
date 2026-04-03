@@ -103,20 +103,17 @@ class FileRepository:
         file_id: uuid.UUID,
         extracted_text: str,
         file_type: str,
-        metadata: dict
+        metadata: dict,
+        description: str        # ← add this
     ) -> Optional[File]:
-        """
-        Updates file after Tika parsing is complete.
-        Sets extracted text, file type, metadata, status → parsed
-        """
         file = self.get_by_id(file_id)
         if not file:
-            logger.error(f"File not found: {file_id}")
             return None
 
         file.extracted_text = extracted_text
         file.file_type = file_type
         file.file_metadata = metadata
+        file.file_description = description   # ← add this
         file.status = "parsed"
         self.db.commit()
         self.db.refresh(file)
