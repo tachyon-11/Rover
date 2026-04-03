@@ -3,6 +3,7 @@ import threading
 import logging
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+from backend.consumers.tika_parser import start_tika_consumer
 from backend.db.database import create_tables
 from backend.routers import health
 from backend.services.watcher import start_watcher
@@ -21,6 +22,13 @@ async def lifespan(app: FastAPI):
     logger.info("Creating Kafka topics...")
     create_topics()
 
+    logger.info("Starting Tika parser consumer...")
+    tika_thread = threading.Thread(              
+        target = start_tika_consumer,
+        daemon=True
+    )
+    tika_thread.start()
+    
     logger.info("Starting file watcher...")
     watcher_thread = threading.Thread(
         target=start_watcher,
