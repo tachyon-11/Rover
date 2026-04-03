@@ -3,6 +3,7 @@ import threading
 import logging
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+from backend.db.database import create_tables
 from backend.routers import health
 from backend.services.watcher import start_watcher
 from backend.services.kafka_admin import create_topics
@@ -14,9 +15,12 @@ WATCH_FOLDER = os.getenv("WATCH_FOLDER", "./watch_folder")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Creating Kafka topics...")
-    create_topics()  
+    logger.info("Creating database tables...")
+    create_tables()  
     
+    logger.info("Creating Kafka topics...")
+    create_topics()
+
     logger.info("Starting file watcher...")
     watcher_thread = threading.Thread(
         target=start_watcher,
