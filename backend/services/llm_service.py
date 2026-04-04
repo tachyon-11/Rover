@@ -1,9 +1,9 @@
+import json
 import logging
 import ollama
-import json
+from backend.schemas.organize import FolderTaxonomy, OrganizationPlan
 
 logger = logging.getLogger(__name__)
-
 MODEL = "llama3.2"
 
 def generate_file_description(
@@ -11,10 +11,9 @@ def generate_file_description(
     extracted_text: str,
     metadata: dict
 ) -> str:
-    # Truncate text —> Doing for my hardware limitation 
+    #Doing as running on local so machine cant support too much load
     truncated_text = extracted_text[:10000] if extracted_text else ""
 
-    # Clean up metadata — only send useful fields
     clean_metadata = {
         k: v for k, v in metadata.items()
         if k in [
@@ -30,109 +29,140 @@ def generate_file_description(
 
     prompt = f"""You will be provided with the contents of a file along with its metadata. Provide a summary of the contents. The purpose of the summary is to organize and rename files based on their content. To this end provide a concise but informative summary. Make the summary as specific to the file as possible and try to include important data that was in file in Content Preview and metaData that might come useful in naming. Try to have description in such a way that if user reads it, they can have good idea about what info is inside file and can decide where to put it just by looking at description without opening file, also keep in mind it will also be used to provide context to LLM when it is making decision about where to put file so include any info that you think might be useful for that in description.
 
-    Filename: {filename}
-    Metadata: {clean_metadata}
-    Content preview: {truncated_text}
+Filename: {filename}
+Metadata: {clean_metadata}
+Content preview: {truncated_text}
 
-    Respond with ONLY the summary, no preamble or explanation."""
+Respond with ONLY the summary, no preamble or explanation."""
 
     try:
         logger.info(f"Generating description for: {filename}")
-
         response = ollama.chat(
             model=MODEL,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            messages=[{"role": "user", "content": prompt}]
         )
-
         description = (response.message.content or "").strip()
         logger.info(f"Description generated for: {filename}")
         return description
-
     except Exception as e:
         logger.error(f"LLM error for {filename}: {e}")
         return f"File: {filename}"
-      
-def batch_organize_files(files: list[dict]) -> list[dict]:
-    """
-    Takes a batch of files with their descriptions.
-    LLM proposes new folder structure + filenames for all.
-    """
 
-    # Build file list for prompt
-    files_text = ""
-    for i, f in enumerate(files, 1):
-        files_text += f"""
-          File {i}:
-          - ID: {f['file_id']}
-          - Current filename: {f['filename']}
-          - File type: {f['file_type']}
-          - Description: {f['file_description']}
-          ---"""
 
-    prompt = f"""You will be provided with a list of files and their descriptions.
-    For each file, propose a new path and filename that optimally organizes them.
+def generate_folder_taxonomy(
+    files: list[dict],
+    existing_folders: list[str]
+) -> FolderTaxonomy:
+    files_text = "\n".join([
+        f"- {f['filename']}: {f['file_description'][:200]}"
+        for f in files
+    ])
 
-    You are organizing files for a user. Use context clues from ALL files together
-    to identify relationships and group related files logically.
+    existing_text = (
+        "\n".join(existing_folders)
+        if existing_folders
+        else "None yet — this is the first organization run"
+    )
 
-    Follow these guidelines:
-    - Think about relationships between files — group related files together
-    - Use context to identify topics (e.g. course names, project names, companies)
-    - Use versioning : Are you maintaining different versions of the same file?
-    - Based on use case try to add some data to filename if it can help user identify content of file just by looking at name without opening it
-    - Structure: Category/Subcategory/FileType/filename.ext
-      - Category: broad topic (This should be the most general grouping, e.g. which woiuld give a broad idea about what all the docs inside have info about")
-      - Subcategory: type within topic (e.g. "Notes", "Assignments", "Invoices", "Reports")
-      - FileType: based on format (Documents, Spreadsheets, Presentations, Text)
-      - filename: descriptive, no spaces, use underscores, include date if available
-    - Use good naming conventions:
-      - No spaces or special characters in filenames
-      - Use underscores to separate words
-      - Include dates in YYYY_MM format if available
-      - Abbreviate long names sensibly
-      - Use versioning if multiple versions exist (v1, v2)
-    - Be specific and consistent across related files
-    If the file is already named well or matches a known convention, set the destination path to the same as the source path.
+    prompt = f"""You are a file organization expert.
 
-    Files to organize:
-    {files_text}
+                  Below is a list of files with their descriptions, and the existing folder structure.
+                  Your job is to design a master folder taxonomy that:
+                  - Creates new folders only when truly needed
+                  - Groups related files logically by topic and purpose
+                  - Uses clear, consistent naming conventions
+                  - Each category must have 2-4 subcategories — no empty subcategories
+                  - NO duplicate categories — each category must be unique
+                  - Categories must be broad and reusable
+                  - Subcategory should be specific type within topic to drilldown specific group of files location based on their use case
+                  - Inside subcategory keep it simple just based on file types as given in map
+                  - Think about relationships between files — group related files together
+                  - Use context clues like names, companies, institutions to identify topics
+                  - REUSES existing folders where appropriate — don't create duplicates
 
-    Respond with ONLY a valid JSON array, no explanation, no markdown, no backticks.
-    Format exactly like this:
-    [
-      {{
-        "file_id": "exact-uuid-from-above",
-        "original_filename": "original name",
-        "new_path": "Category/Subcategory/FileType/new_filename.ext"
-      }}
-    ]"""
+                  Existing folder structure (REUSE these) by this I mean try to fit files which might easily fall into them based on their description into those folders instead of creating new ones:
+                  {existing_text}
+
+                  Files to organize:
+                  {files_text}
+
+                  Design the complete folder taxonomy."""
 
     try:
-        logger.info(f"Batch organizing {len(files)} files...")
-
+        logger.info(f"Generating taxonomy for {len(files)} files...")
         response = ollama.chat(
             model=MODEL,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            messages=[{"role": "user", "content": prompt}],
+            format=FolderTaxonomy.model_json_schema()  # ← structured output
         )
-
-        content = (response.message.content or "").strip()
-
-        # Clean up response — remove markdown if present
-        content = content.replace("```json", "").replace("```", "").strip()
-
-        # Parse JSON
-        result = json.loads(content)
-        logger.info(f"Batch organize complete: {len(result)} files organized")
-        return result
-
-    except json.JSONDecodeError as e:
-        logger.error(f"LLM returned invalid JSON: {e}")
-        logger.error(f"Raw response: {content}")
-        raise
+        taxonomy = FolderTaxonomy.model_validate_json(
+            response.message.content or "{}"
+        )
+        logger.info(f"Taxonomy: {[f.category for f in taxonomy.folders]}")
+        return taxonomy
     except Exception as e:
-        logger.error(f"Batch organize error: {e}")
+        logger.error(f"Taxonomy generation error: {e}")
+        raise
+
+def assign_files_to_taxonomy(
+    files: list[dict],
+    taxonomy: FolderTaxonomy,
+    file_type_map: dict
+) -> OrganizationPlan:
+    # Build taxonomy text for prompt
+    taxonomy_text = ""
+    for folder in taxonomy.folders:
+        taxonomy_text += f"\n{folder.category}/\n"
+        for sub in folder.subcategories:
+            taxonomy_text += f"  └── {sub}/\n"
+
+    # Build file list with type folder hint
+    files_text = ""
+    for f in files:
+        file_type_folder = file_type_map.get(
+            f['file_type'], 'Documents'
+        )
+        files_text += f"""
+                          File ID: {f['file_id']}
+                          Filename: {f['filename']}
+                          File type folder: {file_type_folder}
+                          Description: {f['file_description'][:400]}
+                      """
+
+        prompt = f"""You are a file organization assistant.
+
+                  Assign each file to the most appropriate location in this taxonomy.
+                  The file type folder is the last level before the filename.
+
+                  MASTER TAXONOMY (use ONLY these — do not invent new folders):
+                  {taxonomy_text}
+
+                  NAMING RULES:
+                  - NO spaces in filenames — use underscores only
+                  - NO special characters or leading hyphens
+                  - Include dates in YYYY_MM format if known
+                  - Be descriptive — user should understand file content from name alone
+                  - Add relevant metadata to filename (person name, company, date, version)
+                  - Use versioning if multiple versions exist (v1, v2)
+                  - Structure: Category/Subcategory/FileTypeFolder/filename.ext
+
+                  FILES TO ASSIGN:
+                  {files_text}
+
+                  Assign EVERY file. Use the EXACT file IDs provided."""
+
+    try:
+        logger.info(f"Assigning {len(files)} files to taxonomy...")
+        response = ollama.chat(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            format=OrganizationPlan.model_json_schema()  # ← structured output
+        )
+        plan = OrganizationPlan.model_validate_json(
+            response.message.content or "{}"
+        )
+        logger.info(f"Assigned {len(plan.files)} files")
+        return plan
+    except Exception as e:
+        logger.error(f"File assignment error: {e}")
         raise
