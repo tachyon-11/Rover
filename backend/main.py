@@ -8,6 +8,7 @@ from backend.db.database import create_tables
 from backend.routers import health, organize, search
 from backend.services.watcher import start_watcher
 from backend.services.kafka_admin import create_topics
+from backend.consumers.embedding_consumer import start_embedding_consumer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,6 +29,13 @@ async def lifespan(app: FastAPI):
         daemon=True
     )
     tika_thread.start()
+    
+    logger.info("Starting embedding consumer...")
+    embedding_thread = threading.Thread(
+        target=start_embedding_consumer,
+        daemon=True
+    )
+    embedding_thread.start()
     
     logger.info("Starting file watcher...")
     watcher_thread = threading.Thread(
