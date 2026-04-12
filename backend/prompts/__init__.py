@@ -10,3 +10,4 @@ class PromptType(Enum):
     TAXONOMY = "taxonomy"
     ASSIGNMENT = "assignment"
     RAG = "rag"
+    ASK = "ask" 

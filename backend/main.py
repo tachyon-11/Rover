@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from backend.consumers.tika_parser import start_tika_consumer
 from backend.db.database import create_tables
-from backend.routers import health, organize, search
+from backend.routers import ask, health, organize, search
 from backend.services.watcher import start_watcher
 from backend.services.kafka_admin import create_topics
 from backend.consumers.embedding_consumer import start_embedding_consumer
@@ -60,3 +60,4 @@ app = FastAPI(
 app.include_router(health.router)
 app.include_router(organize.router)
 app.include_router(search.router)
+app.include_router(ask.router)
